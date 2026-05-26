@@ -1,0 +1,40 @@
+{
+  "entities": {
+    "Profile": {
+      "title": "Profile",
+      "description": "User profile data",
+      "type": "object",
+      "properties": {
+        "first_name": { "type": "string" },
+        "last_name": { "type": "string" },
+        "email": { "type": "string" },
+        "is_admin": { "type": "boolean", "description": "Is user an admin?" }
+      },
+      "required": ["first_name"]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "A reservation for the lake house",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "check_in_date": { "type": "string" },
+        "check_out_date": { "type": "string" },
+        "checkout_completed_at": { "type": "string" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["user_id", "check_in_date", "check_out_date", "created_at"]
+    }
+  },
+  "firestore": {
+    "/profiles/{userId}": {
+      "schema": { "$ref": "#/entities/Profile" },
+      "description": "User profiles"
+    },
+    "/bookings/{bookingId}": {
+      "schema": { "$ref": "#/entities/Booking" },
+      "description": "Property bookings"
+    }
+  }
+}

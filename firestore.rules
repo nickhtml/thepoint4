@@ -1,0 +1,71 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Primitive Definition
+    function isSignedIn() { return request.auth != null; }
+    function isAdmin() { 
+      return isSignedIn() && (
+        request.auth.uid == '85DcnhXk0Ma6KmdHUXTvQxRCFP42' ||
+        (exists(/databases/$(database)/documents/profiles/$(request.auth.uid)) && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.is_admin == true)
+      ); 
+    }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    // Blueprint for Profile
+    function isValidProfile(data) {
+      return data.keys().hasAll(['first_name'])
+        && data.first_name is string && data.first_name.size() > 0 && data.first_name.size() <= 100
+        && (!('last_name' in data) || (data.last_name is string && data.last_name.size() <= 100))
+        && (!('email' in data) || (data.email is string && data.email.size() <= 200))
+        && (!('is_admin' in data) || data.is_admin is bool)
+        && (!('avatar' in data) || data.avatar is string);
+    }
+
+    // Profiles Collection
+    match /profiles/{userId} {
+      allow get: if true; // Allows calendar to fetch names, anyone can see profiles (could restrict to signed in)
+      allow list: if true; 
+
+      allow create: if isOwner(userId)
+                    && isValidProfile(incoming())
+                    && incoming().keys().size() <= 5
+                    && (!('is_admin' in incoming()) || incoming().is_admin == false); // user cannot create themselves as admin
+                    
+      allow update: if (isOwner(userId) && isValidProfile(incoming()) && (
+                          (incoming().diff(existing()).affectedKeys().hasOnly(['first_name', 'last_name', 'email', 'avatar']) 
+                           && (!('is_admin' in incoming()) || incoming().is_admin == existing().is_admin) // cannot change own admin status
+                          )
+                        ))
+                    || isAdmin();
+    }
+
+    // Blueprint for Booking
+    function isValidBooking(data) {
+      return data.keys().hasAll(['user_id', 'check_in_date', 'check_out_date', 'created_at', 'id'])
+        && data.user_id is string && data.user_id == request.auth.uid
+        && data.check_in_date is string && data.check_in_date.size() == 10
+        && data.check_out_date is string && data.check_out_date.size() == 10
+        && data.created_at is string && data.created_at.size() <= 30
+        && data.id is string
+        && (!('checkout_completed_at' in data) || data.checkout_completed_at == null || (data.checkout_completed_at is string && data.checkout_completed_at.size() <= 30));
+    }
+
+    // Bookings Collection
+    match /bookings/{bookingId} {
+      allow get: if true;
+      allow list: if true; // Public calendar needs read
+
+      allow create: if isSignedIn() && isValidBooking(incoming()) && incoming().user_id == request.auth.uid;
+      allow delete: if isSignedIn() && (existing().user_id == request.auth.uid || isAdmin());
+      allow update: if false; 
+    }
+  }
+}
